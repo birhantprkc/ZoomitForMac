@@ -17,6 +17,9 @@ final class HotkeyService {
     private var demoTypeResetHotKeyRef: EventHotKeyRef?
     private var panoramaCopyHotKeyRef: EventHotKeyRef?
     private var panoramaSaveHotKeyRef: EventHotKeyRef?
+    private var demoMirrorScreenHotKeyRef: EventHotKeyRef?
+    private var demoMirrorRegionHotKeyRef: EventHotKeyRef?
+    private var demoMirrorWindowHotKeyRef: EventHotKeyRef?
     private var breakHotKeyRef: EventHotKeyRef?
     private var zoomInNavRef: EventHotKeyRef?
     private var zoomOutNavRef: EventHotKeyRef?
@@ -131,6 +134,9 @@ final class HotkeyService {
                 case 13: command = .snipOcr
                 case 14: command = .startDemoType
                 case 15: command = .resetDemoType
+                case 16: command = .toggleDemoMirror(scope: .screen)
+                case 17: command = .toggleDemoMirror(scope: .region)
+                case 18: command = .toggleDemoMirror(scope: .window)
                 default: return noErr
                 }
 
@@ -295,6 +301,39 @@ final class HotkeyService {
             0,
             &breakHotKeyRef
         )
+
+        // DemoMirror: the base shortcut mirrors the whole screen; the same
+        // shortcut with Shift toggled selects a region to mirror; with Option
+        // toggled it mirrors the window under the cursor.
+        let demoMirrorModifiers = NSEvent.ModifierFlags(rawValue: settings.demoMirrorHotKeyModifiers)
+        RegisterEventHotKey(
+            UInt32(settings.demoMirrorHotKeyCode),
+            carbonModifiers(from: demoMirrorModifiers),
+            EventHotKeyID(signature: signature, id: 16),
+            target,
+            0,
+            &demoMirrorScreenHotKeyRef
+        )
+
+        let demoMirrorRegionModifiers = NSEvent.ModifierFlags(rawValue: settings.demoMirrorHotKeyModifiers ^ NSEvent.ModifierFlags.shift.rawValue)
+        RegisterEventHotKey(
+            UInt32(settings.demoMirrorHotKeyCode),
+            carbonModifiers(from: demoMirrorRegionModifiers),
+            EventHotKeyID(signature: signature, id: 17),
+            target,
+            0,
+            &demoMirrorRegionHotKeyRef
+        )
+
+        let demoMirrorWindowModifiers = NSEvent.ModifierFlags(rawValue: settings.demoMirrorHotKeyModifiers ^ NSEvent.ModifierFlags.option.rawValue)
+        RegisterEventHotKey(
+            UInt32(settings.demoMirrorHotKeyCode),
+            carbonModifiers(from: demoMirrorWindowModifiers),
+            EventHotKeyID(signature: signature, id: 18),
+            target,
+            0,
+            &demoMirrorWindowHotKeyRef
+        )
     }
 
     private func unregisterHotKey() {
@@ -346,6 +385,18 @@ final class HotkeyService {
             UnregisterEventHotKey(panoramaSaveHotKeyRef)
         }
         panoramaSaveHotKeyRef = nil
+        if let demoMirrorScreenHotKeyRef {
+            UnregisterEventHotKey(demoMirrorScreenHotKeyRef)
+        }
+        demoMirrorScreenHotKeyRef = nil
+        if let demoMirrorRegionHotKeyRef {
+            UnregisterEventHotKey(demoMirrorRegionHotKeyRef)
+        }
+        demoMirrorRegionHotKeyRef = nil
+        if let demoMirrorWindowHotKeyRef {
+            UnregisterEventHotKey(demoMirrorWindowHotKeyRef)
+        }
+        demoMirrorWindowHotKeyRef = nil
         if let breakHotKeyRef {
             UnregisterEventHotKey(breakHotKeyRef)
         }

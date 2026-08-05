@@ -79,6 +79,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         case record
         case demoType
         case panorama
+        case demoMirror
     }
     private weak var hotKeyButton: NSButton?
     private weak var drawHotKeyButton: NSButton?
@@ -89,6 +90,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private weak var recordHotKeyButton: NSButton?
     private weak var demoTypeHotKeyButton: NSButton?
     private weak var panoramaHotKeyButton: NSButton?
+    private weak var demoMirrorHotKeyButton: NSButton?
+    private weak var demoMirrorTrackWindowCheckbox: NSButton?
     private var hotKeyMonitor: Any?
     private var recordingTarget: HotKeyTarget?
 
@@ -130,6 +133,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         recordHotKeyButton?.title = recordHotKeyDisplayString()
         demoTypeHotKeyButton?.title = demoTypeHotKeyDisplayString()
         panoramaHotKeyButton?.title = panoramaHotKeyDisplayString()
+        demoMirrorHotKeyButton?.title = demoMirrorHotKeyDisplayString()
         launchAtLoginCheckbox?.state = settings.launchAtLogin ? .on : .off
         NSApp.activate(ignoringOtherApps: true)
         window.center()
@@ -148,7 +152,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// (matching Windows ZoomIt, whose Zoom tab holds static-zoom settings only).
     static let settingsTabTitles = [
         "General", "Zoom", "Live Zoom", "Draw", "Type",
-        "DemoType", "Break", "Snip", "Record", "Panorama"
+        "DemoType", "Break", "Snip", "Record", "Panorama", "DemoMirror"
     ]
 
     private func viewForTab(_ title: String) -> NSView {
@@ -163,6 +167,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         case "Snip": return makeSnipTab()
         case "Record": return makeRecordTab()
         case "Panorama": return makePanoramaTab()
+        case "DemoMirror": return makeDemoMirrorTab()
         default: return NSView()
         }
     }
@@ -553,6 +558,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         beginRecording(target: .panorama, sender: sender)
     }
 
+    @objc private func toggleDemoMirrorHotKeyRecording(_ sender: NSButton) {
+        beginRecording(target: .demoMirror, sender: sender)
+    }
+
     private func beginRecording(target: HotKeyTarget, sender: NSButton) {
         if recordingTarget != nil {
             // A recording is already in progress; clicking any recorder stops it.
@@ -594,7 +603,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             if conflictsWithDraw(code: newCode, modifiers: newModifiers) ||
                 conflictsWithLive(code: newCode, modifiers: newModifiers) ||
                 conflictsWithBreak(code: newCode, modifiers: newModifiers) ||
-                conflictsWithDemoType(code: newCode, modifiers: newModifiers) {
+                conflictsWithDemoType(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDemoMirror(code: newCode, modifiers: newModifiers) {
                 NSSound.beep()
                 return nil
             }
@@ -604,7 +614,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             if conflictsWithZoom(code: newCode, modifiers: newModifiers) ||
                 conflictsWithLive(code: newCode, modifiers: newModifiers) ||
                 conflictsWithBreak(code: newCode, modifiers: newModifiers) ||
-                conflictsWithDemoType(code: newCode, modifiers: newModifiers) {
+                conflictsWithDemoType(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDemoMirror(code: newCode, modifiers: newModifiers) {
                 NSSound.beep()
                 return nil
             }
@@ -614,7 +625,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             if conflictsWithZoom(code: newCode, modifiers: newModifiers) ||
                 conflictsWithDraw(code: newCode, modifiers: newModifiers) ||
                 conflictsWithBreak(code: newCode, modifiers: newModifiers) ||
-                conflictsWithDemoType(code: newCode, modifiers: newModifiers) {
+                conflictsWithDemoType(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDemoMirror(code: newCode, modifiers: newModifiers) {
                 NSSound.beep()
                 return nil
             }
@@ -627,7 +639,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 conflictsWithSnip(code: newCode, modifiers: newModifiers) ||
                 conflictsWithRecord(code: newCode, modifiers: newModifiers) ||
                 conflictsWithDemoType(code: newCode, modifiers: newModifiers) ||
-                conflictsWithPanorama(code: newCode, modifiers: newModifiers) {
+                conflictsWithPanorama(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDemoMirror(code: newCode, modifiers: newModifiers) {
                 NSSound.beep()
                 return nil
             }
@@ -638,7 +651,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 conflictsWithDraw(code: newCode, modifiers: newModifiers) ||
                 conflictsWithLive(code: newCode, modifiers: newModifiers) ||
                 conflictsWithBreak(code: newCode, modifiers: newModifiers) ||
-                conflictsWithDemoType(code: newCode, modifiers: newModifiers) {
+                conflictsWithDemoType(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDemoMirror(code: newCode, modifiers: newModifiers) {
                 NSSound.beep()
                 return nil
             }
@@ -650,7 +664,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 conflictsWithLive(code: newCode, modifiers: newModifiers) ||
                 conflictsWithBreak(code: newCode, modifiers: newModifiers) ||
                 conflictsWithSnip(code: newCode, modifiers: newModifiers) ||
-                conflictsWithDemoType(code: newCode, modifiers: newModifiers) {
+                conflictsWithDemoType(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDemoMirror(code: newCode, modifiers: newModifiers) {
                 NSSound.beep()
                 return nil
             }
@@ -661,7 +676,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 conflictsWithDraw(code: newCode, modifiers: newModifiers) ||
                 conflictsWithLive(code: newCode, modifiers: newModifiers) ||
                 conflictsWithBreak(code: newCode, modifiers: newModifiers) ||
-                conflictsWithDemoType(code: newCode, modifiers: newModifiers) {
+                conflictsWithDemoType(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDemoMirror(code: newCode, modifiers: newModifiers) {
                 NSSound.beep()
                 return nil
             }
@@ -675,7 +691,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 conflictsWithSnip(code: newCode, modifiers: newModifiers) ||
                 conflictsWithSnipOcr(code: newCode, modifiers: newModifiers) ||
                 conflictsWithRecord(code: newCode, modifiers: newModifiers) ||
-                conflictsWithPanorama(code: newCode, modifiers: newModifiers) {
+                conflictsWithPanorama(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDemoMirror(code: newCode, modifiers: newModifiers) {
                 NSSound.beep()
                 return nil
             }
@@ -686,12 +703,28 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 conflictsWithDraw(code: newCode, modifiers: newModifiers) ||
                 conflictsWithLive(code: newCode, modifiers: newModifiers) ||
                 conflictsWithBreak(code: newCode, modifiers: newModifiers) ||
-                conflictsWithDemoType(code: newCode, modifiers: newModifiers) {
+                conflictsWithDemoType(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDemoMirror(code: newCode, modifiers: newModifiers) {
                 NSSound.beep()
                 return nil
             }
             settings.panoramaHotKeyCode = newCode
             settings.panoramaHotKeyModifiers = newModifiers
+        case .demoMirror:
+            if conflictsWithZoom(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDraw(code: newCode, modifiers: newModifiers) ||
+                conflictsWithLive(code: newCode, modifiers: newModifiers) ||
+                conflictsWithBreak(code: newCode, modifiers: newModifiers) ||
+                conflictsWithSnip(code: newCode, modifiers: newModifiers) ||
+                conflictsWithSnipOcr(code: newCode, modifiers: newModifiers) ||
+                conflictsWithRecord(code: newCode, modifiers: newModifiers) ||
+                conflictsWithDemoType(code: newCode, modifiers: newModifiers) ||
+                conflictsWithPanorama(code: newCode, modifiers: newModifiers) {
+                NSSound.beep()
+                return nil
+            }
+            settings.demoMirrorHotKeyCode = newCode
+            settings.demoMirrorHotKeyModifiers = newModifiers
         case nil:
             return nil
         }
@@ -739,6 +772,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         code == settings.panoramaHotKeyCode && modifiers == settings.panoramaHotKeyModifiers
     }
 
+    private func conflictsWithDemoMirror(code: Int, modifiers: UInt) -> Bool {
+        code == settings.demoMirrorHotKeyCode && modifiers == settings.demoMirrorHotKeyModifiers
+    }
+
     private func finishRecording() {
         // Resume the global hotkeys only if a capture was actually in progress,
         // keeping the suspend/resume balanced no matter how recording ends
@@ -761,6 +798,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         recordHotKeyButton?.title = recordHotKeyDisplayString()
         demoTypeHotKeyButton?.title = demoTypeHotKeyDisplayString()
         panoramaHotKeyButton?.title = panoramaHotKeyDisplayString()
+        demoMirrorHotKeyButton?.title = demoMirrorHotKeyDisplayString()
     }
 
     private func zoomHotKeyDisplayString() -> String {
@@ -799,6 +837,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func panoramaHotKeyDisplayString() -> String {
         Self.describe(keyCode: settings.panoramaHotKeyCode, modifiers: NSEvent.ModifierFlags(rawValue: settings.panoramaHotKeyModifiers))
+    }
+
+    private func demoMirrorHotKeyDisplayString() -> String {
+        Self.describe(keyCode: settings.demoMirrorHotKeyCode, modifiers: NSEvent.ModifierFlags(rawValue: settings.demoMirrorHotKeyModifiers))
     }
 
     // MARK: - Draw tab
@@ -1259,6 +1301,41 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let panoramaHotKeyRow = makeRow([makeLabel("Panorama Toggle:"), panoramaHotKeyButton])
 
         return makeColumn([help, panoramaHotKeyRow])
+    }
+
+    // MARK: - DemoMirror tab
+
+    private func makeDemoMirrorTab() -> NSView {
+        let help = makeLabel(
+            "DemoMirror mirrors the screen, a region of the screen, or a window, including the mouse pointer, onto a second monitor. Use it to show a demo app on the presentation monitor, on top of the slide show, without leaving the presentation.",
+            wraps: true
+        )
+
+        let shortcutHelp = makeLabel(
+            "Enter the hotkey to mirror the entire screen, enter it with the Shift key to select a region to mirror, or with the Option key to mirror the window under the cursor. Enter the hotkey again to stop mirroring.",
+            wraps: true
+        )
+
+        let demoMirrorHotKeyButton = NSButton(title: demoMirrorHotKeyDisplayString(), target: self, action: #selector(toggleDemoMirrorHotKeyRecording(_:)))
+        demoMirrorHotKeyButton.bezelStyle = .rounded
+        demoMirrorHotKeyButton.setButtonType(.momentaryPushIn)
+        demoMirrorHotKeyButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 140).isActive = true
+        self.demoMirrorHotKeyButton = demoMirrorHotKeyButton
+        let demoMirrorHotKeyRow = makeRow([makeLabel("Mirror Toggle:"), demoMirrorHotKeyButton])
+
+        let trackWindowHelp = makeLabel(
+            "When mirroring a window, DemoMirror can track the window's screen region so ZoomIt zoom and draw show in place. Uncheck to mirror the window's surface directly, unaffected by overlapping windows.",
+            wraps: true
+        )
+        let trackWindowCheck = makeCheckbox("Track window region:", action: #selector(demoMirrorTrackWindowChanged(_:)), state: settings.demoMirrorTrackWindowRegion)
+        demoMirrorTrackWindowCheckbox = trackWindowCheck
+
+        return makeColumn([help, shortcutHelp, demoMirrorHotKeyRow, trackWindowHelp, trackWindowCheck])
+    }
+
+    @objc private func demoMirrorTrackWindowChanged(_ sender: NSButton) {
+        settings.demoMirrorTrackWindowRegion = (sender.state == .on)
+        persist()
     }
 
     @objc private func recordSystemAudioChanged(_ sender: NSButton) {
