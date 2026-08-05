@@ -29,6 +29,12 @@ private final class FlippedContainerView: NSView {
 /// Displays the live mirrored image, letterboxed within the mirror window.
 @MainActor
 private final class DemoMirrorImageView: NSView {
+    // A flipped (top-left origin) view, matching ZoomCanvasView/SnipSelectionView:
+    // CGImage always draws with row 0 at the bottom of the current graphics
+    // context's coordinate space, so without both the flip below *and* this
+    // `isFlipped` override the image renders upside down.
+    override var isFlipped: Bool { true }
+
     var image: CGImage? {
         didSet { needsDisplay = true }
     }

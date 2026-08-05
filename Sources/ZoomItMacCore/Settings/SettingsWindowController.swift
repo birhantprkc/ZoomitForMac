@@ -36,6 +36,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private static let wrappedLabelWidth: CGFloat = contentWidth - panelHorizontalInset * 2
 
     private var window: NSWindow?
+    /// The tab content switcher, driven by `tabSelectorButtons` instead of its
+    /// own native tab strip (see `makeWindow`).
+    private weak var settingsTabView: NSTabView?
+    /// Custom two-row tab selector buttons, in the same order as
+    /// `settingsTabTitles`, kept in sync with `settingsTabView`'s selection.
+    private var tabSelectorButtons: [NSButton] = []
 
     // Type tab controls.
     private weak var fontSampleLabel: NSTextField?
@@ -197,6 +203,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         let tabView = NSTabView()
         tabView.translatesAutoresizingMaskIntoConstraints = false
+        // The native tab strip is a single row that can't wrap, and with 11
+        // tabs it no longer fits the window's width. Hide it (keeping the
+        // bezel border around the content) and drive selection from a custom
+        // two-row button bar built below instead.
+        tabView.tabViewType = .noTabsBezelBorder
         for (label, content) in tabs {
             // The holder is frame-managed so NSTabView resizes it to fill the
             // content area; the content is pinned to the holder's top so every
@@ -228,8 +239,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             tabView.widthAnchor.constraint(equalToConstant: Self.contentWidth + chromeWidth),
             tabView.heightAnchor.constraint(equalToConstant: tabContentHeight + chromeHeight)
         ])
+        settingsTabView = tabView
 
-        let outer = NSStackView(views: [tabView, makeFooter()])
+        let tabBar = makeTabSelectorBar(titles: Self.settingsTabTitles, tabView: tabView)
+
+        let outer = NSStackView(views: [tabBar, tabView, makeFooter()])
         outer.orientation = .vertical
         outer.alignment = .centerX
         outer.spacing = 12
@@ -278,6 +292,44 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         item.label = label
         item.view = view
         return item
+    }
+
+    /// Builds a two-row tab selector (splitting `titles` roughly in half) so
+    /// all tabs stay reachable without shrinking or an overflow menu, which is
+    /// what the native single-row tab strip falls back to once there are too
+    /// many tabs to fit the window's width.
+    private func makeTabSelectorBar(titles: [String], tabView: NSTabView) -> NSView {
+        let buttons: [NSButton] = titles.enumerated().map { index, title in
+            let button = NSButton(title: title, target: self, action: #selector(selectCustomTab(_:)))
+            button.tag = index
+            button.bezelStyle = .recessed
+            button.setButtonType(.pushOnPushOff)
+            button.state = index == 0 ? .on : .off
+            return button
+        }
+        tabSelectorButtons = buttons
+
+        let splitIndex = Int((Double(buttons.count) / 2).rounded(.up))
+        let firstRow = NSStackView(views: Array(buttons[..<splitIndex]))
+        let secondRow = NSStackView(views: Array(buttons[splitIndex...]))
+        for row in [firstRow, secondRow] {
+            row.orientation = .horizontal
+            row.spacing = 2
+        }
+
+        let bar = NSStackView(views: [firstRow, secondRow])
+        bar.orientation = .vertical
+        bar.alignment = .centerX
+        bar.spacing = 2
+        return bar
+    }
+
+    @objc private func selectCustomTab(_ sender: NSButton) {
+        guard let settingsTabView, settingsTabView.tabViewItems.indices.contains(sender.tag) else { return }
+        settingsTabView.selectTabViewItem(at: sender.tag)
+        for button in tabSelectorButtons {
+            button.state = (button === sender) ? .on : .off
+        }
     }
 
     private func makeFooter() -> NSView {
