@@ -20,7 +20,7 @@ private final class LinkButton: NSButton {
 /// exposing the Zoom, Draw, and Type settings that ZoomIt supports. Each tab
 /// carries the same kind of descriptive help text the Windows dialog shows.
 @MainActor
-final class SettingsWindowController: NSObject, NSWindowDelegate {
+final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDelegate {
     private let settingsStore: SettingsStore
     private let onHotKeyChange: () -> Void
     private let onSuspendHotkeys: () -> Void
@@ -36,12 +36,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private static let wrappedLabelWidth: CGFloat = contentWidth - panelHorizontalInset * 2
 
     private var window: NSWindow?
-    /// The tab content switcher, driven by `tabSelectorButtons` instead of its
-    /// own native tab strip (see `makeWindow`).
+    /// The pane content switcher. Its own tab strip is hidden; selection is
+    /// driven by the window's native preference-style toolbar (see `makeWindow`).
     private weak var settingsTabView: NSTabView?
-    /// Custom two-row tab selector buttons, in the same order as
-    /// `settingsTabTitles`, kept in sync with `settingsTabView`'s selection.
-    private var tabSelectorButtons: [NSButton] = []
 
     // Type tab controls.
     private weak var fontSampleLabel: NSTextField?
@@ -241,9 +238,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         ])
         settingsTabView = tabView
 
-        let tabBar = makeTabSelectorBar(titles: Self.settingsTabTitles, tabView: tabView)
-
-        let outer = NSStackView(views: [tabBar, tabView, makeFooter()])
+        let outer = NSStackView(views: [tabView, makeFooter()])
         outer.orientation = .vertical
         outer.alignment = .centerX
         outer.spacing = 12
@@ -270,6 +265,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         Self.configureAlwaysOnTop(window)
+        configurePreferenceToolbar(on: window)
 
         // Size the window to fit the (now equal-height) tabs plus the footer.
         container.layoutSubtreeIfNeeded()
@@ -294,42 +290,83 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         return item
     }
 
-    /// Builds a two-row tab selector (splitting `titles` roughly in half) so
-    /// all tabs stay reachable without shrinking or an overflow menu, which is
-    /// what the native single-row tab strip falls back to once there are too
-    /// many tabs to fit the window's width.
-    private func makeTabSelectorBar(titles: [String], tabView: NSTabView) -> NSView {
-        let buttons: [NSButton] = titles.enumerated().map { index, title in
-            let button = NSButton(title: title, target: self, action: #selector(selectCustomTab(_:)))
-            button.tag = index
-            button.bezelStyle = .recessed
-            button.setButtonType(.pushOnPushOff)
-            button.state = index == 0 ? .on : .off
-            return button
-        }
-        tabSelectorButtons = buttons
-
-        let splitIndex = Int((Double(buttons.count) / 2).rounded(.up))
-        let firstRow = NSStackView(views: Array(buttons[..<splitIndex]))
-        let secondRow = NSStackView(views: Array(buttons[splitIndex...]))
-        for row in [firstRow, secondRow] {
-            row.orientation = .horizontal
-            row.spacing = 2
-        }
-
-        let bar = NSStackView(views: [firstRow, secondRow])
-        bar.orientation = .vertical
-        bar.alignment = .centerX
-        bar.spacing = 2
-        return bar
+    /// Installs the standard macOS preferences toolbar (one selectable item per
+    /// pane, as in System Settings and Safari's preferences). AppKit handles
+    /// selection highlighting and, when the items don't all fit, an overflow
+    /// menu — which a plain `NSTabView` tab strip does not do.
+    private func configurePreferenceToolbar(on window: NSWindow) {
+        let toolbar = NSToolbar(identifier: "ZoomItSettingsToolbar")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconAndLabel
+        toolbar.allowsUserCustomization = false
+        toolbar.selectedItemIdentifier = Self.toolbarItemIdentifier(for: Self.settingsTabTitles[0])
+        window.toolbar = toolbar
+        window.toolbarStyle = .preference
     }
 
-    @objc private func selectCustomTab(_ sender: NSButton) {
+    private static func toolbarItemIdentifier(for title: String) -> NSToolbarItem.Identifier {
+        NSToolbarItem.Identifier("ZoomItSettingsPane.\(title)")
+    }
+
+    /// SF Symbol shown in the toolbar for each pane.
+    static func toolbarSymbolName(for title: String) -> String {
+        switch title {
+        case "General": return "gearshape"
+        case "Zoom": return "plus.magnifyingglass"
+        case "Live Zoom": return "magnifyingglass.circle"
+        case "Draw": return "pencil.tip"
+        case "Type": return "textformat"
+        case "DemoType": return "keyboard"
+        case "Break": return "timer"
+        case "Snip": return "camera.viewfinder"
+        case "Record": return "record.circle"
+        case "Panorama": return "pano"
+        case "DemoMirror": return "rectangle.on.rectangle"
+        default: return "square"
+        }
+    }
+
+    @objc private func selectPaneFromToolbar(_ sender: NSToolbarItem) {
         guard let settingsTabView, settingsTabView.tabViewItems.indices.contains(sender.tag) else { return }
         settingsTabView.selectTabViewItem(at: sender.tag)
-        for button in tabSelectorButtons {
-            button.state = (button === sender) ? .on : .off
-        }
+        window?.toolbar?.selectedItemIdentifier = sender.itemIdentifier
+    }
+
+    // MARK: - NSToolbarDelegate
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        Self.settingsTabTitles.map(Self.toolbarItemIdentifier(for:))
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        toolbarDefaultItemIdentifiers(toolbar)
+    }
+
+    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        toolbarDefaultItemIdentifiers(toolbar)
+    }
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        guard let index = Self.settingsTabTitles.firstIndex(where: {
+            Self.toolbarItemIdentifier(for: $0) == itemIdentifier
+        }) else { return nil }
+
+        let title = Self.settingsTabTitles[index]
+        let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+        item.label = title
+        item.paletteLabel = title
+        item.image = NSImage(
+            systemSymbolName: Self.toolbarSymbolName(for: title),
+            accessibilityDescription: title
+        )
+        item.target = self
+        item.action = #selector(selectPaneFromToolbar(_:))
+        item.tag = index
+        return item
     }
 
     private func makeFooter() -> NSView {

@@ -112,6 +112,9 @@ final class DemoMirrorController {
     /// Re-checks a tracked window's position/existence periodically, matching
     /// Windows ZoomIt's window-tracking + topmost-reclaim timer.
     private var trackingTimer: Timer?
+    /// Watches for displays being connected/disconnected so mirroring can stop
+    /// if the target display goes away.
+    private var screenParametersObserver: NSObjectProtocol?
 
     init(
         displayManager: DisplayManager,
@@ -165,6 +168,11 @@ final class DemoMirrorController {
         trackedWindowID = nil
         sourceDisplay = nil
         targetDisplay = nil
+
+        if let screenParametersObserver {
+            NotificationCenter.default.removeObserver(screenParametersObserver)
+            self.screenParametersObserver = nil
+        }
 
         cursorLease?.invalidate()
         cursorLease = nil
@@ -259,7 +267,6 @@ final class DemoMirrorController {
             NSSound.beep()
             return
         }
-        showWindowBorder(source: source, windowFrame: window.frame)
         trackedWindowID = window.windowID
         await beginMirroring(source: source, target: target, region: nil, window: window)
     }
@@ -279,8 +286,7 @@ final class DemoMirrorController {
         }
     }
 
-    private func showWindowBorder(source: DisplayDescriptor, windowFrame: CGRect) {
-        let localRect = Self.displayLocalRect(fromQuartzGlobal: windowFrame, display: source)
+    private func showWindowBorder(source: DisplayDescriptor, localRect: CGRect) {
         let window = NSWindow(
             contentRect: source.frame,
             styleMask: [.borderless],
@@ -317,6 +323,9 @@ final class DemoMirrorController {
 
         let filter: SCContentFilter
         let contentSize: CGSize
+        // The mirrored area in source-display-local, top-left-origin points, so
+        // the green border can mark it on the source display.
+        let sourceRect: CGRect
         let configuration = SCStreamConfiguration()
         configuration.showsCursor = true
         configuration.queueDepth = 3
@@ -331,6 +340,7 @@ final class DemoMirrorController {
             contentSize = CGSize(width: window.frame.width * scale, height: window.frame.height * scale)
             configuration.width = Int(contentSize.width)
             configuration.height = Int(contentSize.height)
+            sourceRect = Self.displayLocalRect(fromQuartzGlobal: window.frame, display: source)
         } else {
             filter = SCContentFilter(display: scDisplay, excludingWindows: [])
             let cropRect: CGRect
@@ -348,6 +358,7 @@ final class DemoMirrorController {
             configuration.width = Int(cropRect.width * scale)
             configuration.height = Int(cropRect.height * scale)
             contentSize = CGSize(width: cropRect.width * scale, height: cropRect.height * scale)
+            sourceRect = cropRect
         }
 
         let newStream = SCStream(filter: filter, configuration: configuration, delegate: nil)
@@ -368,6 +379,10 @@ final class DemoMirrorController {
 
         showBackdrop(target: target)
         showMirrorWindow(target: target, contentSize: contentSize)
+        // Mark what's being mirrored on the source display, for every scope
+        // (whole screen, selected region, or window).
+        showWindowBorder(source: source, localRect: sourceRect)
+        startWatchingForDisplayChanges()
 
         if window != nil {
             startTrackingTimer(source: source)
@@ -411,6 +426,33 @@ final class DemoMirrorController {
         mirrorImageView = view
         window.orderFrontRegardless()
         mirrorWindow = window
+    }
+
+    /// Stops mirroring if the target (or source) display is disconnected.
+    /// Without this, the mirror's full-screen, screen-saver-level windows get
+    /// migrated by macOS onto the remaining display, where they cover
+    /// everything (including the menu bar) and — being click-through — leave no
+    /// way to reach ZoomIt to turn mirroring off.
+    private func startWatchingForDisplayChanges() {
+        if let screenParametersObserver {
+            NotificationCenter.default.removeObserver(screenParametersObserver)
+            self.screenParametersObserver = nil
+        }
+        screenParametersObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.isActive else { return }
+                let displayIDs = Set(self.displayManager.displays().map(\.id))
+                let targetGone = self.targetDisplay.map { !displayIDs.contains($0.id) } ?? true
+                let sourceGone = self.sourceDisplay.map { !displayIDs.contains($0.id) } ?? true
+                if targetGone || sourceGone {
+                    self.stop()
+                }
+            }
+        }
     }
 
     /// Periodically re-checks a tracked window: stops mirroring if it closed,
