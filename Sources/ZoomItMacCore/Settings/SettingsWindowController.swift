@@ -20,7 +20,7 @@ private final class LinkButton: NSButton {
 /// exposing the Zoom, Draw, and Type settings that ZoomIt supports. Each tab
 /// carries the same kind of descriptive help text the Windows dialog shows.
 @MainActor
-final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDelegate {
+final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate {
     private let settingsStore: SettingsStore
     private let onHotKeyChange: () -> Void
     private let onSuspendHotkeys: () -> Void
@@ -31,14 +31,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
     private var settings: AppSettings
 
     private static let homepageURLString = "http://www.sysinternals.com"
-    private static let contentWidth: CGFloat = 620
+    private static let contentWidth: CGFloat = 540
     private static let panelHorizontalInset: CGFloat = 28
     private static let wrappedLabelWidth: CGFloat = contentWidth - panelHorizontalInset * 2
 
     private var window: NSWindow?
     /// The pane content switcher. Its own tab strip is hidden; selection is
-    /// driven by the window's native preference-style toolbar (see `makeWindow`).
+    /// driven by the sidebar list (see `makeWindow`).
     private weak var settingsTabView: NSTabView?
+    /// The source-list sidebar that selects the visible pane.
+    private weak var sidebarTableView: NSTableView?
+    private static let sidebarWidth: CGFloat = 190
+    private static let sidebarRowHeight: CGFloat = 28
+    /// Vertical room reserved in the sidebar for the product/copyright/link
+    /// footer beneath the pane list.
+    private static let sidebarFooterAllowance: CGFloat = 90
 
     // Type tab controls.
     private weak var fontSampleLabel: NSTextField?
@@ -238,7 +245,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
         ])
         settingsTabView = tabView
 
-        let outer = NSStackView(views: [tabView, makeFooter()])
+        let outer = NSStackView(views: [tabView])
         outer.orientation = .vertical
         outer.alignment = .centerX
         outer.spacing = 12
@@ -261,17 +268,87 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
             defer: false
         )
         window.title = "ZoomIt - Sysinternals: www.sysinternals.com"
-        window.contentView = container
+        window.contentViewController = makeSplitViewController(content: container)
         window.isReleasedWhenClosed = false
         window.delegate = self
         Self.configureAlwaysOnTop(window)
-        configurePreferenceToolbar(on: window)
 
-        // Size the window to fit the (now equal-height) tabs plus the footer.
+        // Size the window to fit the tallest pane, leaving room for the sidebar
+        // alongside it and keeping it tall enough that the sidebar's full pane
+        // list and its footer fit without scrolling.
         container.layoutSubtreeIfNeeded()
         let fitting = container.fittingSize
-        window.setContentSize(NSSize(width: max(fitting.width, 480), height: max(fitting.height, 360)))
+        let sidebarNeededHeight = CGFloat(Self.settingsTabTitles.count) * Self.sidebarRowHeight
+            + Self.sidebarFooterAllowance
+        window.setContentSize(NSSize(
+            width: max(fitting.width + Self.sidebarWidth, 480),
+            height: max(fitting.height, sidebarNeededHeight, 360)
+        ))
         return window
+    }
+
+    /// Presents the panes with a source-list sidebar, the same arrangement
+    /// System Settings uses. A sidebar keeps all panes visible at once; the
+    /// preferences toolbar this replaced pushed the last few into an overflow
+    /// menu once there were too many to fit the window's width.
+    private func makeSplitViewController(content: NSView) -> NSSplitViewController {
+        let sidebarController = NSViewController()
+        sidebarController.view = makeSidebarView()
+
+        let contentController = NSViewController()
+        contentController.view = content
+
+        let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarController)
+        sidebarItem.canCollapse = false
+        sidebarItem.minimumThickness = Self.sidebarWidth
+        sidebarItem.maximumThickness = Self.sidebarWidth
+
+        let splitViewController = NSSplitViewController()
+        splitViewController.addSplitViewItem(sidebarItem)
+        splitViewController.addSplitViewItem(NSSplitViewItem(viewController: contentController))
+        return splitViewController
+    }
+
+    private func makeSidebarView() -> NSView {
+        let tableView = NSTableView()
+        tableView.headerView = nil
+        tableView.style = .sourceList
+        tableView.rowHeight = Self.sidebarRowHeight
+        tableView.selectionHighlightStyle = .regular
+        tableView.allowsEmptySelection = false
+        tableView.dataSource = self
+        tableView.delegate = self
+
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("pane"))
+        column.resizingMask = .autoresizingMask
+        tableView.addTableColumn(column)
+
+        let scrollView = NSScrollView()
+        scrollView.documentView = tableView
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+        scrollView.automaticallyAdjustsContentInsets = true
+
+        sidebarTableView = tableView
+        tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+
+        // The product/copyright/link block sits at the foot of the sidebar.
+        let footer = makeFooter(maxWidth: Self.sidebarWidth - 16)
+        let container = NSView()
+        container.addSubview(scrollView)
+        container.addSubview(footer)
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        footer.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            footer.topAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: 8),
+            footer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+            footer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
+            footer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12)
+        ])
+        return container
     }
 
     /// Configures the settings window to behave like the Windows Options dialog:
@@ -292,24 +369,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
 
     /// Installs the standard macOS preferences toolbar (one selectable item per
     /// pane, as in System Settings and Safari's preferences). AppKit handles
-    /// selection highlighting and, when the items don't all fit, an overflow
-    /// menu — which a plain `NSTabView` tab strip does not do.
-    private func configurePreferenceToolbar(on window: NSWindow) {
-        let toolbar = NSToolbar(identifier: "ZoomItSettingsToolbar")
-        toolbar.delegate = self
-        toolbar.displayMode = .iconAndLabel
-        toolbar.allowsUserCustomization = false
-        toolbar.selectedItemIdentifier = Self.toolbarItemIdentifier(for: Self.settingsTabTitles[0])
-        window.toolbar = toolbar
-        window.toolbarStyle = .preference
-    }
-
-    private static func toolbarItemIdentifier(for title: String) -> NSToolbarItem.Identifier {
-        NSToolbarItem.Identifier("ZoomItSettingsPane.\(title)")
-    }
-
-    /// SF Symbol shown in the toolbar for each pane.
-    static func toolbarSymbolName(for title: String) -> String {
+    /// SF Symbol shown beside each pane's name in the sidebar.
+    static func paneSymbolName(for title: String) -> String {
         switch title {
         case "General": return "gearshape"
         case "Zoom": return "plus.magnifyingglass"
@@ -326,50 +387,55 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
         }
     }
 
-    @objc private func selectPaneFromToolbar(_ sender: NSToolbarItem) {
-        guard let settingsTabView, settingsTabView.tabViewItems.indices.contains(sender.tag) else { return }
-        settingsTabView.selectTabViewItem(at: sender.tag)
-        window?.toolbar?.selectedItemIdentifier = sender.itemIdentifier
+    // MARK: - Sidebar list
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        Self.settingsTabTitles.count
     }
 
-    // MARK: - NSToolbarDelegate
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard Self.settingsTabTitles.indices.contains(row) else { return nil }
+        let title = Self.settingsTabTitles[row]
 
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        Self.settingsTabTitles.map(Self.toolbarItemIdentifier(for:))
-    }
-
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar)
-    }
-
-    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar)
-    }
-
-    func toolbar(
-        _ toolbar: NSToolbar,
-        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
-        willBeInsertedIntoToolbar flag: Bool
-    ) -> NSToolbarItem? {
-        guard let index = Self.settingsTabTitles.firstIndex(where: {
-            Self.toolbarItemIdentifier(for: $0) == itemIdentifier
-        }) else { return nil }
-
-        let title = Self.settingsTabTitles[index]
-        let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-        item.label = title
-        item.paletteLabel = title
-        item.image = NSImage(
-            systemSymbolName: Self.toolbarSymbolName(for: title),
-            accessibilityDescription: title
+        let imageView = NSImageView(
+            image: NSImage(
+                systemSymbolName: Self.paneSymbolName(for: title),
+                accessibilityDescription: nil
+            ) ?? NSImage()
         )
-        item.target = self
-        item.action = #selector(selectPaneFromToolbar(_:))
-        item.tag = index
-        return item
+        imageView.contentTintColor = .controlAccentColor
+        imageView.widthAnchor.constraint(equalToConstant: 18).isActive = true
+
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: NSFont.systemFontSize)
+        label.lineBreakMode = .byTruncatingTail
+
+        let stack = NSStackView(views: [imageView, label])
+        stack.orientation = .horizontal
+        stack.spacing = 6
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
+
+        let cell = NSTableCellView()
+        cell.addSubview(stack)
+        cell.textField = label
+        cell.imageView = imageView
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: cell.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: cell.trailingAnchor),
+            stack.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
+        ])
+        return cell
     }
 
-    private func makeFooter() -> NSView {
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let sidebarTableView, let settingsTabView else { return }
+        let row = sidebarTableView.selectedRow
+        guard settingsTabView.tabViewItems.indices.contains(row) else { return }
+        settingsTabView.selectTabViewItem(at: row)
+    }
+
+    private func makeFooter(maxWidth: CGFloat) -> NSView {
         let title = makeLabel("\(AppInfo.productName) \(AppInfo.version)")
         title.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         title.textColor = .secondaryLabelColor
@@ -379,6 +445,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
         copyright.font = NSFont.systemFont(ofSize: 11)
         copyright.textColor = .secondaryLabelColor
         copyright.alignment = .center
+
+        // The sidebar is much narrower than the pane area the footer used to
+        // sit under, so let the product and copyright lines wrap to fit it.
+        for label in [title, copyright] {
+            label.lineBreakMode = .byWordWrapping
+            label.maximumNumberOfLines = 0
+            label.preferredMaxLayoutWidth = maxWidth
+        }
 
         let link = makeLink(title: "www.sysinternals.com")
 
