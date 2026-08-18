@@ -28,6 +28,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private let onRequestMicrophone: () -> Void
     private let onRequestCamera: () -> Void
     private let onOpenTrimEditor: () -> Void
+    private let userSelectedResourceAccess: UserSelectedResourceAccess
     private var settings: AppSettings
 
     private static let homepageURLString = "http://www.sysinternals.com"
@@ -61,8 +62,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private weak var snipSaveDirectoryField: NSTextField?
     private weak var snipSaveDirectoryBrowseButton: NSButton?
 
+    #if !ZOOMIT_APP_STORE
     // DemoType tab controls.
     private weak var demoTypeFileField: NSTextField?
+    #endif
 
     // Webcam controls.
     private weak var webcamDevicePopup: NSPopUpButton?
@@ -87,7 +90,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         case snip
         case snipOcr
         case record
+        #if !ZOOMIT_APP_STORE
         case demoType
+        #endif
         case panorama
         case demoMirror
     }
@@ -98,7 +103,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     private weak var snipHotKeyButton: NSButton?
     private weak var snipOcrHotKeyButton: NSButton?
     private weak var recordHotKeyButton: NSButton?
+    #if !ZOOMIT_APP_STORE
     private weak var demoTypeHotKeyButton: NSButton?
+    #endif
     private weak var panoramaHotKeyButton: NSButton?
     private weak var demoMirrorHotKeyButton: NSButton?
     private weak var demoMirrorTrackWindowCheckbox: NSButton?
@@ -112,7 +119,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         onResumeHotkeys: @escaping () -> Void,
         onRequestMicrophone: @escaping () -> Void,
         onRequestCamera: @escaping () -> Void,
-        onOpenTrimEditor: @escaping () -> Void
+        onOpenTrimEditor: @escaping () -> Void,
+        userSelectedResourceAccess: UserSelectedResourceAccess
     ) {
         self.settingsStore = settingsStore
         self.onHotKeyChange = onHotKeyChange
@@ -121,6 +129,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         self.onRequestMicrophone = onRequestMicrophone
         self.onRequestCamera = onRequestCamera
         self.onOpenTrimEditor = onOpenTrimEditor
+        self.userSelectedResourceAccess = userSelectedResourceAccess
         self.settings = settingsStore.load()
         super.init()
     }
@@ -141,7 +150,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         snipHotKeyButton?.title = snipHotKeyDisplayString()
         snipOcrHotKeyButton?.title = snipOcrHotKeyDisplayString()
         recordHotKeyButton?.title = recordHotKeyDisplayString()
+        #if !ZOOMIT_APP_STORE
         demoTypeHotKeyButton?.title = demoTypeHotKeyDisplayString()
+        #endif
         panoramaHotKeyButton?.title = panoramaHotKeyDisplayString()
         demoMirrorHotKeyButton?.title = demoMirrorHotKeyDisplayString()
         launchAtLoginCheckbox?.state = settings.launchAtLogin ? .on : .off
@@ -160,10 +171,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
 
     /// The Options dialog tabs, in order. Zoom and Live Zoom are separate tabs
     /// (matching Windows ZoomIt, whose Zoom tab holds static-zoom settings only).
-    static let settingsTabTitles = [
-        "General", "Zoom", "Live Zoom", "Draw", "Type",
-        "DemoType", "Break", "Snip", "Record", "Panorama", "DemoMirror"
-    ]
+    static var settingsTabTitles: [String] {
+        var titles = ["General", "Zoom", "Live Zoom", "Draw", "Type"]
+        #if !ZOOMIT_APP_STORE
+        titles.append("DemoType")
+        #endif
+        titles.append(contentsOf: ["Break", "Snip", "Record", "Panorama", "DemoMirror"])
+        return titles
+    }
 
     private func viewForTab(_ title: String) -> NSView {
         switch title {
@@ -172,7 +187,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         case "Live Zoom": return makeLiveZoomTab()
         case "Draw": return makeDrawTab()
         case "Type": return makeTypeTab()
+        #if !ZOOMIT_APP_STORE
         case "DemoType": return makeDemoTypeTab()
+        #endif
         case "Break": return makeBreakTab()
         case "Snip": return makeSnipTab()
         case "Record": return makeRecordTab()
@@ -367,9 +384,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         return item
     }
 
-    /// Installs the standard macOS preferences toolbar (one selectable item per
-    /// pane, as in System Settings and Safari's preferences). AppKit handles
-    /// SF Symbol shown beside each pane's name in the sidebar.
+    /// Returns the SF Symbol shown beside each pane's name in the sidebar.
     static func paneSymbolName(for title: String) -> String {
         switch title {
         case "General": return "gearshape"
@@ -713,9 +728,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         beginRecording(target: .record, sender: sender)
     }
 
+    #if !ZOOMIT_APP_STORE
     @objc private func toggleDemoTypeHotKeyRecording(_ sender: NSButton) {
         beginRecording(target: .demoType, sender: sender)
     }
+    #endif
 
     @objc private func togglePanoramaHotKeyRecording(_ sender: NSButton) {
         beginRecording(target: .panorama, sender: sender)
@@ -846,6 +863,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
             }
             settings.recordHotKeyCode = newCode
             settings.recordHotKeyModifiers = newModifiers
+        #if !ZOOMIT_APP_STORE
         case .demoType:
             if conflictsWithZoom(code: newCode, modifiers: newModifiers) ||
                 conflictsWithDraw(code: newCode, modifiers: newModifiers) ||
@@ -861,6 +879,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
             }
             settings.demoTypeHotKeyCode = newCode
             settings.demoTypeHotKeyModifiers = newModifiers
+        #endif
         case .panorama:
             if conflictsWithZoom(code: newCode, modifiers: newModifiers) ||
                 conflictsWithDraw(code: newCode, modifiers: newModifiers) ||
@@ -927,8 +946,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
     }
 
     private func conflictsWithDemoType(code: Int, modifiers: UInt) -> Bool {
+        #if ZOOMIT_APP_STORE
+        false
+        #else
         settings.demoTypeHotKeyCode != 0 &&
             code == settings.demoTypeHotKeyCode && modifiers == settings.demoTypeHotKeyModifiers
+        #endif
     }
 
     private func conflictsWithPanorama(code: Int, modifiers: UInt) -> Bool {
@@ -959,7 +982,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         snipHotKeyButton?.title = snipHotKeyDisplayString()
         snipOcrHotKeyButton?.title = snipOcrHotKeyDisplayString()
         recordHotKeyButton?.title = recordHotKeyDisplayString()
+        #if !ZOOMIT_APP_STORE
         demoTypeHotKeyButton?.title = demoTypeHotKeyDisplayString()
+        #endif
         panoramaHotKeyButton?.title = panoramaHotKeyDisplayString()
         demoMirrorHotKeyButton?.title = demoMirrorHotKeyDisplayString()
     }
@@ -993,10 +1018,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         Self.describe(keyCode: settings.recordHotKeyCode, modifiers: NSEvent.ModifierFlags(rawValue: settings.recordHotKeyModifiers))
     }
 
+    #if !ZOOMIT_APP_STORE
     private func demoTypeHotKeyDisplayString() -> String {
         guard settings.demoTypeHotKeyCode != 0 else { return "None" }
         return Self.describe(keyCode: settings.demoTypeHotKeyCode, modifiers: NSEvent.ModifierFlags(rawValue: settings.demoTypeHotKeyModifiers))
     }
+    #endif
 
     private func panoramaHotKeyDisplayString() -> String {
         Self.describe(keyCode: settings.panoramaHotKeyCode, modifiers: NSEvent.ModifierFlags(rawValue: settings.panoramaHotKeyModifiers))
@@ -1255,6 +1282,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         panel.allowedContentTypes = [.audio]
         panel.title = "ZoomIt: Specify Sound File"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard saveSelection(url, for: .breakSound) else { return }
         settings.breakSoundFile = url.path
         breakSoundFileField?.stringValue = url.path
         persist()
@@ -1273,6 +1301,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         panel.allowedContentTypes = [.image]
         panel.title = "ZoomIt: Specify Background File"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard saveSelection(url, for: .breakBackground) else { return }
         settings.breakBackgroundFile = url.path
         breakBackgroundFileField?.stringValue = url.path
         persist()
@@ -1383,6 +1412,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         panel.prompt = "Choose"
         panel.title = "ZoomIt: Choose Snip Folder"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard saveSelection(url, for: .snipDirectory) else { return }
         settings.snipSaveDirectory = url.path
         snipSaveDirectoryField?.stringValue = url.path
         persist()
@@ -1703,6 +1733,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         persist()
     }
 
+    #if !ZOOMIT_APP_STORE
     // MARK: - DemoType tab
 
     private func makeDemoTypeTab() -> NSView {
@@ -1767,11 +1798,25 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTableViewDat
         settings.demoTypeUserDriven = sender.state == .on
         persist()
     }
+    #endif
 
     // MARK: - Persistence
 
     private func persist() {
         settingsStore.save(settings)
+    }
+
+    private func saveSelection(_ url: URL, for resource: UserSelectedResource) -> Bool {
+        do {
+            try userSelectedResourceAccess.saveSelection(url, for: resource)
+            return true
+        } catch {
+            if DistributionChannel.isAppStore {
+                NSAlert(error: error).runModal()
+                return false
+            }
+            return true
+        }
     }
 
     // MARK: - Key formatting

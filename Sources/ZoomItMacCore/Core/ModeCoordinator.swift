@@ -9,6 +9,7 @@ final class ModeCoordinator {
     private let overlayController: OverlayWindowController
     private let annotationController: AnnotationController
     private let viewportController: ZoomViewportController
+    private let userSelectedResourceAccess: UserSelectedResourceAccess
 
     private(set) var mode: AppMode = .idle
     private var isExiting = false
@@ -21,7 +22,8 @@ final class ModeCoordinator {
         captureService: captureService,
         displayManager: displayManager,
         permissionService: permissionService,
-        settingsStore: settingsStore
+        settingsStore: settingsStore,
+        userSelectedResourceAccess: userSelectedResourceAccess
     )
     private var isSnipping = false
     /// Drives screen recording (Control+5 / Control+Shift+5).
@@ -35,16 +37,20 @@ final class ModeCoordinator {
     private lazy var panoramaController = PanoramaController(
         displayManager: displayManager,
         permissionService: permissionService,
-        settingsStore: settingsStore
+        settingsStore: settingsStore,
+        userSelectedResourceAccess: userSelectedResourceAccess
     )
+    #if !ZOOMIT_APP_STORE
     /// Drives DemoType text synthesis from a file or [start]-prefixed clipboard.
     private lazy var demoTypeController = DemoTypeController(settingsStore: settingsStore)
-        /// Drives the full-screen break timer (Control+3).
-        private lazy var breakTimerController = BreakTimerController(
-            displayManager: displayManager,
-            captureService: captureService,
-            settingsStore: settingsStore
-        )
+    #endif
+    /// Drives the full-screen break timer (Control+3).
+    private lazy var breakTimerController = BreakTimerController(
+        displayManager: displayManager,
+        captureService: captureService,
+        settingsStore: settingsStore,
+        userSelectedResourceAccess: userSelectedResourceAccess
+    )
     /// Drives DemoMirror (Control+9 / Shift for a region / Option for a window).
     private lazy var demoMirrorController = DemoMirrorController(
         displayManager: displayManager,
@@ -65,7 +71,8 @@ final class ModeCoordinator {
         captureService: ScreenCaptureService,
         overlayController: OverlayWindowController,
         annotationController: AnnotationController,
-        viewportController: ZoomViewportController
+        viewportController: ZoomViewportController,
+        userSelectedResourceAccess: UserSelectedResourceAccess
     ) {
         self.settingsStore = settingsStore
         self.permissionService = permissionService
@@ -74,6 +81,7 @@ final class ModeCoordinator {
         self.overlayController = overlayController
         self.annotationController = annotationController
         self.viewportController = viewportController
+        self.userSelectedResourceAccess = userSelectedResourceAccess
     }
 
     func handle(_ command: AppCommand) {
@@ -127,10 +135,12 @@ final class ModeCoordinator {
             toggleRecording(region: region)
         case .startPanorama(let save):
             togglePanorama(save: save)
+        #if !ZOOMIT_APP_STORE
         case .startDemoType:
             demoTypeController.startOrStop()
         case .resetDemoType:
             demoTypeController.reset()
+        #endif
         case .toggleBreakTimer:
             toggleBreakTimer()
         case .toggleDemoMirror(let scope):
