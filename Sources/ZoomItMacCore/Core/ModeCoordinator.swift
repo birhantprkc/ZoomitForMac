@@ -41,7 +41,7 @@ final class ModeCoordinator {
         userSelectedResourceAccess: userSelectedResourceAccess
     )
     #if !ZOOMIT_APP_STORE
-    /// Drives DemoType text synthesis from a file or [start]-prefixed clipboard.
+    /// Drives DemoType text synthesis from the configured file.
     private lazy var demoTypeController = DemoTypeController(settingsStore: settingsStore)
     #endif
     /// Drives the full-screen break timer (Control+3).
