@@ -453,7 +453,10 @@ public enum SelfTestRunner {
         store.save(settings)
 
         pasteboard.clearContents()
-        pasteboard.setString("[start]clipboard content[end]", forType: .string)
+        try expect(
+            pasteboard.setString("[start]clipboard content[end]", forType: .string),
+            "Expected DemoType source test to stage general pasteboard content"
+        )
 
         let loaded = try DemoTypeController.configuredTextForTesting(settingsStore: store)
         try expect(loaded == fileScript, "Expected DemoType to load only the configured file and ignore general pasteboard content")
