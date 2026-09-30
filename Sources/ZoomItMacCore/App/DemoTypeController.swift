@@ -232,6 +232,12 @@ final class DemoTypeController {
         clean(input)
     }
 
+    static func configuredTextForTesting(settingsStore: SettingsStore) throws -> String {
+        let controller = DemoTypeController(settingsStore: settingsStore)
+        try controller.loadTextIfNeeded(settings: settingsStore.load())
+        return controller.text
+    }
+
     static func pauseSecondsForTesting(_ value: String) -> Int? {
         parsePauseSeconds(value[...])
     }
