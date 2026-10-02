@@ -45,6 +45,7 @@ public enum SelfTestRunner {
         try testDemoTypeSettingsRoundTrip()
         try testDemoTypeScriptCleaningAndTokens()
         try testDemoTypeScriptDecoding()
+        try testDemoTypeConfiguredFileIgnoresPasteboard()
         try testDemoTypePauseBounds()
         try testDemoTypeUnicodeEncoding()
         try testDemoTypeTypingDelayRange()
@@ -418,6 +419,47 @@ public enum SelfTestRunner {
         try expect(DemoTypeController.decodeForTesting(Data([0xEF, 0xBB, 0xBF]) + Data("utf8".utf8)) == "utf8", "Expected UTF-8 BOM DemoType text")
         try expect(DemoTypeController.decodeForTesting(Data([0xFF, 0xFE, 0x6C, 0x00, 0x65, 0x00])) == "le", "Expected UTF-16LE DemoType text")
         try expect(DemoTypeController.decodeForTesting(Data([0xFE, 0xFF, 0x00, 0x62, 0x00, 0x65])) == "be", "Expected UTF-16BE DemoType text")
+    }
+
+    private static func testDemoTypeConfiguredFileIgnoresPasteboard() throws {
+        let suiteName = "ZoomItMacSelfTest.DemoTypeSource.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            throw SelfTestError.failure("Could not create DemoType source test UserDefaults suite")
+        }
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ZoomItMacSelfTest-\(UUID().uuidString).txt")
+        let pasteboard = NSPasteboard.general
+        let savedPasteboardItems: [NSPasteboardItem] = pasteboard.pasteboardItems?.map { item in
+            let copy = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) {
+                    copy.setData(data, forType: type)
+                }
+            }
+            return copy
+        } ?? []
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: fileURL)
+            pasteboard.clearContents()
+            pasteboard.writeObjects(savedPasteboardItems.map { $0 as NSPasteboardWriting })
+        }
+
+        let fileScript = "configured file[end]"
+        try Data(fileScript.utf8).write(to: fileURL, options: .atomic)
+        let store = UserDefaultsSettingsStore(defaults: defaults)
+        var settings = AppSettings.defaults
+        settings.demoTypeFile = fileURL.path
+        store.save(settings)
+
+        pasteboard.clearContents()
+        try expect(
+            pasteboard.setString("[start]clipboard content[end]", forType: .string),
+            "Expected DemoType source test to stage general pasteboard content"
+        )
+
+        let loaded = try DemoTypeController.configuredTextForTesting(settingsStore: store)
+        try expect(loaded == fileScript, "Expected DemoType to load only the configured file and ignore general pasteboard content")
     }
 
     private static func testDemoTypePauseBounds() throws {

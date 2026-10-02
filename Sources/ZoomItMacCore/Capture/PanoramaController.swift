@@ -256,16 +256,16 @@ final class PanoramaController {
             onStateChange?(false)
             updateBanner("ZoomIt panorama stitching...")
 
-            // Optional: dump raw frames for offline algorithm debugging when
-            // ZOOMIT_PANORAMA_DUMP is set. Each file is width,height-prefixed
-            // RGBA. Enables building regressions from real captures.
+            #if DEBUG
             Self.dumpFramesIfRequested(frames)
+            #endif
 
             let message = await finishCapture(frames: frames, save: save)
             showCompletion(message: message)
         }
     }
 
+    #if DEBUG
     private static func dumpFramesIfRequested(_ frames: [PanoramaStitcher.Frame]) {
         guard let dir = ProcessInfo.processInfo.environment["ZOOMIT_PANORAMA_DUMP"], !frames.isEmpty else { return }
         let base = URL(fileURLWithPath: dir, isDirectory: true)
@@ -280,6 +280,7 @@ final class PanoramaController {
         }
         NSLog("ZoomIt: dumped \(frames.count) panorama frames to \(dir)")
     }
+    #endif
 
     private func captureText(frameCount: Int) -> String {
         let frameWord = frameCount == 1 ? "frame" : "frames"

@@ -3,11 +3,9 @@ import Foundation
 
 @MainActor
 enum SingleInstance {
-    static let showSettingsNotification = Notification.Name("com.sysinternals.zoomitmac.showSettings")
-
     private static var lockFileDescriptor: CInt = -1
 
-    static func claimOrActivateExisting() -> Bool {
+    static func claim() -> Bool {
         let lockURL = lockFileURL()
         try? FileManager.default.createDirectory(
             at: lockURL.deletingLastPathComponent(),
@@ -23,12 +21,6 @@ enum SingleInstance {
         }
 
         close(fd)
-        DistributedNotificationCenter.default().postNotificationName(
-            showSettingsNotification,
-            object: nil,
-            userInfo: nil,
-            deliverImmediately: true
-        )
         return false
     }
 

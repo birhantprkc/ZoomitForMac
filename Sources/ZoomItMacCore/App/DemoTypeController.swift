@@ -49,7 +49,6 @@ final class DemoTypeController {
     private static let typingVariance = 1.0
     private static let injectedEventMarker: Int64 = 0x5A495444
     private static let endControl = "[end]"
-    private static let startControl = "[start]"
 
     private let settingsStore: SettingsStore
     private var text = ""
@@ -200,16 +199,6 @@ final class DemoTypeController {
     }
 
     private func loadTextIfNeeded(settings: AppSettings) throws {
-        if let clipboardText = readClipboardDemoText() {
-            sourceKey = "clipboard"
-            sourceModifiedDate = nil
-            text = Self.clean(clipboardText)
-            index = text.startIndex
-            segmentStarts = []
-            guard !text.isEmpty else { throw DemoTypeError.unrecognizedContent }
-            return
-        }
-
         guard !settings.demoTypeFile.isEmpty else { throw DemoTypeError.noFileSpecified }
         let url = URL(fileURLWithPath: settings.demoTypeFile)
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
@@ -235,20 +224,18 @@ final class DemoTypeController {
         segmentStarts = []
     }
 
-    private func readClipboardDemoText() -> String? {
-        guard let clipboard = NSPasteboard.general.string(forType: .string), clipboard.hasPrefix(Self.startControl) else {
-            return nil
-        }
-        let start = clipboard.index(clipboard.startIndex, offsetBy: Self.startControl.count)
-        return String(clipboard[start...])
-    }
-
     static func decodeForTesting(_ data: Data) -> String? {
         decode(data)
     }
 
     static func cleanForTesting(_ input: String) -> String {
         clean(input)
+    }
+
+    static func configuredTextForTesting(settingsStore: SettingsStore) throws -> String {
+        let controller = DemoTypeController(settingsStore: settingsStore)
+        try controller.loadTextIfNeeded(settings: settingsStore.load())
+        return controller.text
     }
 
     static func pauseSecondsForTesting(_ value: String) -> Int? {

@@ -10,7 +10,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        guard SingleInstance.claimOrActivateExisting() else {
+        guard SingleInstance.claim() else {
             NSApplication.shared.terminate(nil)
             return
         }
@@ -67,13 +67,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             userSelectedResourceAccess: userSelectedResourceAccess
         )
 
-        DistributedNotificationCenter.default().addObserver(
-            self,
-            selector: #selector(showSettingsFromOtherInstance(_:)),
-            name: SingleInstance.showSettingsNotification,
-            object: nil
-        )
-
         statusItem = makeStatusItem(controller: appController!)
         modeCoordinator.onRecordingStateChanged = { [weak self] recording in
             self?.updateRecordingIndicator(recording)
@@ -92,12 +85,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
-        DistributedNotificationCenter.default().removeObserver(self)
         SingleInstance.release()
-    }
-
-    @objc private func showSettingsFromOtherInstance(_ notification: Notification) {
-        appController?.showSettings()
     }
 
     /// Swaps the menu-bar icon for a red record indicator while recording.
